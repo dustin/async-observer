@@ -143,10 +143,10 @@ class AsyncObserver::Worker
           RAILS_DEFAULT_LOGGER.info 'Job deadline soon; you should clean up.'
         rescue Exception => ex
           @q_hint = nil # in case there's something wrong with this conn
-          RAILS_DEFAULT_LOGGER.info(
+          RAILS_DEFAULT_LOGGER.warn(
             "#{ex.class}: #{ex}\n" + ex.backtrace.join("\n"))
-          RAILS_DEFAULT_LOGGER.info 'something is wrong. We failed to get a job.'
-          RAILS_DEFAULT_LOGGER.info "sleeping for #{SLEEP_TIME}s..."
+          RAILS_DEFAULT_LOGGER.warn 'something is wrong. We failed to get a job.'
+          RAILS_DEFAULT_LOGGER.warn "sleeping for #{SLEEP_TIME}s..."
           sleep(SLEEP_TIME)
         end
       end
@@ -161,12 +161,10 @@ class AsyncObserver::Worker
 
   def safe_dispatch(job)
     log_bracketed('worker-dispatch') do
-      RAILS_DEFAULT_LOGGER.info "got #{job.inspect}:\n" + job.body
-      log_bracketed('job-stats') do
-        job.stats.each do |k,v|
-          RAILS_DEFAULT_LOGGER.info "#{k}=#{v}"
-        end
-      end
+      RAILS_DEFAULT_LOGGER.info "Got job #{job.id}"
+      RAILS_DEFAULT_LOGGER.debug "got #{job.inspect}:\n" + job.body
+      statstr=job.stats.to_a.map{|k,v| "#{k}=#{v}"}.join ', '
+      RAILS_DEFAULT_LOGGER.info "job stats:  #{statstr}"
       begin
         return dispatch(job)
       rescue Interrupt => ex
@@ -196,14 +194,14 @@ class AsyncObserver::Worker
   end
 
   def self.default_handle_error(job, ex)
-    RAILS_DEFAULT_LOGGER.info "Job failed: #{job.server}/#{job.id}"
-    RAILS_DEFAULT_LOGGER.info("#{ex.class}: #{ex}\n" + ex.backtrace.join("\n"))
+    RAILS_DEFAULT_LOGGER.warn "Job failed: #{job.server}/#{job.id}"
+    RAILS_DEFAULT_LOGGER.warn("#{ex.class}: #{ex}\n" + ex.backtrace.join("\n"))
     job.decay()
   rescue Beanstalk::UnexpectedResponse
   end
 
   def run_ao_job(job)
-    RAILS_DEFAULT_LOGGER.info 'running as async observer job'
+    RAILS_DEFAULT_LOGGER.info "running #{job.id} as async observer job"
     f = self.class.before_filter
     f.call(job) if f
     job.delete if job.ybody[:delete_first]
@@ -226,7 +224,7 @@ class AsyncObserver::Worker
   end
 
   def run_other(job)
-    RAILS_DEFAULT_LOGGER.info 'trying custom handler'
+    RAILS_DEFAULT_LOGGER.info "trying custom handler for #{job.id}"
     self.class.handle.call(job)
   end
 
