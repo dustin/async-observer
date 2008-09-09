@@ -95,11 +95,14 @@ class << ActiveRecord::Base
   end
 
   def add_async_hook(hook, block)
-    async_hooks[hook] << block
+    async_hook(hook) << block
   end
 
-  def async_hooks
-    @async_hooks ||= Hash.new do |hash, hook|
+  def async_hook(hook)
+    hooks_name = "async_hooks_#{hook}"
+    if h = read_inheritable_attribute(hooks_name)
+      return h
+    else
       ahook = :"_async_#{hook}"
 
       # This is for the producer's benefit
@@ -108,13 +111,13 @@ class << ActiveRecord::Base
       # This is for the worker's benefit
       code = "def #{ahook}(o) run_async_hooks(#{hook.inspect}, o) end"
       instance_eval(code, __FILE__, __LINE__ - 1)
-
-      hash[hook] = []
+      write_inheritable_attribute(hooks_name, [])
+      return async_hook(hook)
     end
   end
 
   def run_async_hooks(hook, o)
-    async_hooks[hook].each{|b| b.call(o)}
+    async_hook(hook).each{|b| b.call(o)}
   end
 
   def send_to_instance(id, selector, *args)
